@@ -1,0 +1,16 @@
+cat > .gitignore << 'EOF'
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# data/output (DO NOT COMMIT)
+data/
+**/*.tif
+**/*.tiff
+**/*.npy
+**/*.npz
+**/qc/
+EOF
