@@ -56,18 +56,3 @@ def grid_to_64_with_valid(
 
     return mat, valid_grid
 
-
-# I don't recommend use this function. 
-def grid_to_64(
-    frames: np.ndarray,
-    mask: np.ndarray,
-    grid: int = 64,
-    fill_value: float = 0.0,
-    min_coverage: float = 0.0,
-) -> np.ndarray:
-    
-    mat, _ = grid_to_64_with_valid(frames, mask, grid=grid, min_coverage=min_coverage)
-    if fill_value is None:
-        return mat
-    return np.nan_to_num(mat, nan=float(fill_value)).astype(np.float32)
-    

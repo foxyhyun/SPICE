@@ -100,12 +100,12 @@ def run_stepB_dff(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    mat = np.load(str(matrix_path)).astype(np.float32)                 # (T,64,64)
-    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)            # (64,64) bool
+    mat = np.load(str(matrix_path)).astype(np.float32)     
+    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)      
 
+    # ===delta F 분석 및 저장 ===
     dff, f0 = compute_dff(mat, valid, f0_percentile=float(f0_percentile))
 
-    # stem: 3_stack.stepA.matrix64.npy -> 3_stack
     name = matrix_path.name
     stem = name.replace(".stepA.matrix64.npy", "").replace(".matrix64.npy", "")
 
@@ -124,6 +124,8 @@ def run_stepB_dff(
         "dff_max": float(np.nanmax(dff)),
         "dff_mean": float(np.nanmean(dff)),
     }
+
+    # =====================
 
     # ---- QC outputs ----
     qc_dir = out_dir / "qc"
