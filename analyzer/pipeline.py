@@ -8,6 +8,8 @@ from .motion import rigid_motion_correct_ecc
 from .mask import projection_ref, build_mask_from_ref
 from .gridder import grid_to_64_with_valid
 from .dff import compute_dff
+from .phase import compute_hilbert_phase
+from .qc import save_heatmap, save_phase_snapshot
 
 # QC
 from .qc import (
@@ -16,6 +18,7 @@ from .qc import (
     save_heatmap,
     save_dff_snapshot,
     save_random_traces,
+    save_phase_snapshot,
 )
 
 @dataclass
@@ -139,4 +142,58 @@ def run_stepB_dff(
     meta["qc_stepB_snap"] = str(qc_dir / f"{stem}.stepB_dff_snapshot.png")
     meta["qc_stepB_traces"] = str(qc_dir / f"{stem}.stepB_dff_traces.png")
 
+    return meta
+
+def run_stepC_phase(
+    dff_path: str | Path,
+    valid_path: str | Path,
+    out_dir: str | Path,
+    *,
+    fs: float,
+    f_lo: float = 0.1,
+    f_hi: float = 3.0,
+    filter_order: int = 3,
+    time_decimate: int = 1,
+    fill_nan: str = "interp",
+    snapshot_t: int | None = None,
+):
+    dff_path = Path(dff_path)
+    valid_path = Path(valid_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dff = np.load(str(dff_path)).astype(np.float32)              # (T,64,64)
+    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)      # (64,64)
+
+    res = compute_hilbert_phase(
+        dff,
+        valid,
+        fs=float(fs),
+        f_lo=float(f_lo),
+        f_hi=float(f_hi),
+        filter_order=int(filter_order),
+        time_decimate=int(time_decimate),
+        fill_nan=str(fill_nan),
+    )
+
+    name = dff_path.name
+    stem = name.replace(".stepB.dff64.npy", "").replace(".dff64.npy", "")
+
+    phase_path = out_dir / f"{stem}.stepC.phase64.npy"
+    np.save(phase_path, res.phase)
+
+    meta = {
+        "saved_phase": str(phase_path),
+        **res.meta,
+        "phase_shape": list(res.phase.shape),
+    }
+
+    qc_dir = out_dir / "qc"
+    qc_dir.mkdir(parents=True, exist_ok=True)
+
+    t_index = (res.phase.shape[0] // 2) if (snapshot_t is None) else int(snapshot_t)
+
+    snap_path = qc_dir / f"{stem}.stepC_phase_snapshot.png"
+    save_phase_snapshot(res.phase, t_index=t_index, out_path=snap_path)
+    meta["qc_stepC_snap"] = str(snap_path)
     return meta

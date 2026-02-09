@@ -9,10 +9,10 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QTextEdit, QCheckBox, QComboBox,
-    QDoubleSpinBox, QLineEdit, QGroupBox, QStackedWidget, QMessageBox
+    QDoubleSpinBox, QSpinBox, QLineEdit, QGroupBox, QStackedWidget, QMessageBox
 )
 
-from .worker import StepAWorker, StepBWorker
+from .worker import StepAWorker, StepBWorker, StepCWorker
 
 
 # ----------------------------
@@ -117,7 +117,6 @@ class StepAPage(QWidget):
 
         lay.addWidget(box)
 
-        # QC previews
         pbox = QGroupBox("Step 1 Results (QC Preview)")
         p = QHBoxLayout(pbox)
         self.prev_overlay = ImagePreview("Mask Overlay")
@@ -134,7 +133,6 @@ class StepAPage(QWidget):
         p, _ = QFileDialog.getOpenFileName(self, "Select TIFF", "", "TIFF Files (*.tif *.tiff)")
         if p:
             self.in_tiff.setText(p)
-            # default output folder next to input
             self.out_dir.setText(str(Path(p).parent))
 
     def pick_outdir(self):
@@ -208,7 +206,6 @@ class StepBPage(QWidget):
 
         lay.addWidget(box)
 
-        # QC previews
         pbox = QGroupBox("Step 2 Results (QC Preview)")
         p = QHBoxLayout(pbox)
         self.prev_f0 = ImagePreview("F0 Map (64×64)")
@@ -245,6 +242,140 @@ class StepBPage(QWidget):
             os.startfile(str(qc_dir))
 
 
+class StepCPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+
+        box = QGroupBox("Step 3: Phase (bandpass + Hilbert) → Save")
+        b = QVBoxLayout(box)
+
+        r1 = QHBoxLayout()
+        self.in_dff = QLineEdit()
+        btn_d = QPushButton("Select StepB dff64.npy")
+        btn_d.clicked.connect(self.pick_dff)
+        r1.addWidget(QLabel("StepB dFF:"))
+        r1.addWidget(self.in_dff)
+        r1.addWidget(btn_d)
+        b.addLayout(r1)
+
+        r2 = QHBoxLayout()
+        self.in_valid = QLineEdit()
+        btn_v = QPushButton("Select StepA valid64.npy")
+        btn_v.clicked.connect(self.pick_valid)
+        r2.addWidget(QLabel("StepA valid:"))
+        r2.addWidget(self.in_valid)
+        r2.addWidget(btn_v)
+        b.addLayout(r2)
+
+        r3 = QHBoxLayout()
+        self.out_dir = QLineEdit()
+        btn_out = QPushButton("Select Output Folder")
+        btn_out.clicked.connect(self.pick_outdir)
+        r3.addWidget(QLabel("Output folder:"))
+        r3.addWidget(self.out_dir)
+        r3.addWidget(btn_out)
+        b.addLayout(r3)
+
+        r4 = QHBoxLayout()
+        self.sp_fs = QDoubleSpinBox()
+        self.sp_fs.setRange(0.01, 1_000_000.0)
+        self.sp_fs.setValue(10.0)
+
+        self.sp_flo = QDoubleSpinBox()
+        self.sp_flo.setRange(0.0, 10_000.0)
+        self.sp_flo.setValue(0.1)
+
+        self.sp_fhi = QDoubleSpinBox()
+        self.sp_fhi.setRange(0.01, 10_000.0)
+        self.sp_fhi.setValue(3.0)
+
+        r4.addWidget(QLabel("fs:"))
+        r4.addWidget(self.sp_fs)
+        r4.addSpacing(10)
+        r4.addWidget(QLabel("f_lo:"))
+        r4.addWidget(self.sp_flo)
+        r4.addSpacing(10)
+        r4.addWidget(QLabel("f_hi:"))
+        r4.addWidget(self.sp_fhi)
+        r4.addStretch(1)
+        b.addLayout(r4)
+
+        r5 = QHBoxLayout()
+        self.sp_order = QSpinBox()
+        self.sp_order.setRange(1, 10)
+        self.sp_order.setValue(3)
+
+        self.sp_dec = QSpinBox()
+        self.sp_dec.setRange(1, 1000)
+        self.sp_dec.setValue(1)
+
+        self.cmb_fill = QComboBox()
+        self.cmb_fill.addItems(["interp", "zero", "none"])
+
+        self.sp_snap_t = QSpinBox()
+        self.sp_snap_t.setRange(0, 10_000_000)
+        self.sp_snap_t.setValue(0)
+
+        r5.addWidget(QLabel("order:"))
+        r5.addWidget(self.sp_order)
+        r5.addSpacing(10)
+        r5.addWidget(QLabel("time_decimate:"))
+        r5.addWidget(self.sp_dec)
+        r5.addSpacing(10)
+        r5.addWidget(QLabel("fill_nan:"))
+        r5.addWidget(self.cmb_fill)
+        r5.addSpacing(10)
+        r5.addWidget(QLabel("snapshot t:"))
+        r5.addWidget(self.sp_snap_t)
+        r5.addStretch(1)
+        b.addLayout(r5)
+
+        r6 = QHBoxLayout()
+        self.btn_run = QPushButton("Run Step 3")
+        r6.addWidget(self.btn_run)
+        r6.addStretch(1)
+        self.btn_open_qc = QPushButton("Open QC folder")
+        self.btn_open_qc.setEnabled(False)
+        r6.addWidget(self.btn_open_qc)
+        b.addLayout(r6)
+
+        lay.addWidget(box)
+
+        pbox = QGroupBox("Step 3 Results (QC Preview)")
+        p = QHBoxLayout(pbox)
+        self.prev_phase = ImagePreview("Phase Snapshot (-π~π)")
+        p.addWidget(self.prev_phase)
+        lay.addWidget(pbox)
+
+        lay.addStretch(1)
+
+        self.btn_open_qc.clicked.connect(self.open_qc)
+
+    def pick_dff(self):
+        p, _ = QFileDialog.getOpenFileName(self, "Select StepB dff", "", "NPY Files (*.npy)")
+        if p:
+            self.in_dff.setText(p)
+
+    def pick_valid(self):
+        p, _ = QFileDialog.getOpenFileName(self, "Select StepA valid", "", "NPY Files (*.npy)")
+        if p:
+            self.in_valid.setText(p)
+
+    def pick_outdir(self):
+        d = QFileDialog.getExistingDirectory(self, "Select output folder")
+        if d:
+            self.out_dir.setText(d)
+
+    def open_qc(self):
+        out = self.out_dir.text().strip()
+        if not out:
+            return
+        qc_dir = Path(out) / "qc"
+        if qc_dir.exists():
+            os.startfile(str(qc_dir))
+
+
 # ----------------------------
 # Main Wizard Window
 # ----------------------------
@@ -257,128 +388,127 @@ class MainWindow(QMainWindow):
         self.thread: QThread | None = None
         self.worker = None
 
-        # state
         self.input_tiff: Path | None = None
         self.out_dir: Path | None = None
         self.stem: str | None = None
 
         self.stepA_paths: dict = {}
         self.stepB_paths: dict = {}
+        self.stepC_paths: dict = {}
 
         root = QWidget()
         self.setCentralWidget(root)
         lay = QVBoxLayout(root)
 
-        # Progress header
-        self.lbl_progress = QLabel("Step 1 / 2")
+        self.lbl_progress = QLabel("Step 1 / 3")
         self.lbl_progress.setStyleSheet("font-size: 18px; font-weight: 600;")
         lay.addWidget(self.lbl_progress)
 
-        # Stacked pages
         self.stack = QStackedWidget()
         self.pageA = StepAPage()
         self.pageB = StepBPage()
+        self.pageC = StepCPage()
         self.stack.addWidget(self.pageA)
         self.stack.addWidget(self.pageB)
+        self.stack.addWidget(self.pageC)
         lay.addWidget(self.stack, stretch=1)
 
-        # Log
         lay.addWidget(QLabel("Log / Meta:"))
         self.log = QTextEdit()
         self.log.setReadOnly(True)
         lay.addWidget(self.log, stretch=1)
 
-        # Navigation buttons
         nav = QHBoxLayout()
         self.btn_back = QPushButton("Back")
         self.btn_continue = QPushButton("Continue")
         self.btn_back.clicked.connect(self.go_back)
         self.btn_continue.clicked.connect(self.go_continue)
-
         nav.addWidget(self.btn_back)
         nav.addStretch(1)
         nav.addWidget(self.btn_continue)
         lay.addLayout(nav)
 
-        # Initial state
         self.btn_back.setEnabled(False)
-        self.btn_continue.setEnabled(False)  # enabled only after successful step run
+        self.btn_continue.setEnabled(False)
 
-        # Wire run buttons
         self.pageA.btn_run.clicked.connect(self.run_stepA)
         self.pageB.btn_run.clicked.connect(self.run_stepB)
+        self.pageC.btn_run.clicked.connect(self.run_stepC)
 
         self._update_ui()
 
-    # ----------------------------
-    # UI state helpers
-    # ----------------------------
     def append(self, s: str):
         self.log.append(s)
 
     def _set_busy(self, busy: bool):
-        # disable nav and run buttons when busy
         self.pageA.btn_run.setEnabled(not busy)
         self.pageB.btn_run.setEnabled(not busy)
+        self.pageC.btn_run.setEnabled(not busy)
         self.btn_back.setEnabled((not busy) and self.stack.currentIndex() > 0)
-        # Continue only when current step complete
-        # (we won't change continue here; it depends on completion flags)
 
     def _update_ui(self):
         idx = self.stack.currentIndex()
-        self.lbl_progress.setText(f"Step {idx+1} / 2")
-
+        self.lbl_progress.setText(f"Step {idx+1} / 3")
         self.btn_back.setEnabled(idx > 0)
 
         if idx == 0:
-            # Continue enabled only if StepA completed
             self.btn_continue.setEnabled(bool(self.stepA_paths))
-        else:
-            # Continue enabled only if StepB completed (end in v0)
+        elif idx == 1:
             self.btn_continue.setEnabled(bool(self.stepB_paths))
+        else:
+            self.btn_continue.setEnabled(bool(self.stepC_paths))
 
-        # also enable "Open QC folder" on page if outputs exist
         self.pageA.btn_open_qc.setEnabled(bool(self.stepA_paths))
         self.pageB.btn_open_qc.setEnabled(bool(self.stepB_paths))
+        self.pageC.btn_open_qc.setEnabled(bool(self.stepC_paths))
 
     def _start_thread(self, worker):
-        self.thread = QThread()
+        if self.thread is not None and self.thread.isRunning():
+            self.append("ERROR: Previous thread still running.")
+            return
+
+        self.thread = QThread(self)
         self.worker = worker
         self.worker.moveToThread(self.thread)
+
         self.thread.started.connect(self.worker.run)
-        self.worker.log.connect(self.append)
+        self.worker.log.connect(self.append, Qt.QueuedConnection)
 
         def finish_ok(meta: dict):
             self.append("\n--- DONE ---")
             for k, v in meta.items():
                 self.append(f"{k}: {v}")
-
             self._set_busy(False)
-            self.thread.quit()
-            self.thread.wait()
-
-            # after completion, update Continue logic
             self._update_ui()
+            if self.thread and self.thread.isRunning():
+                self.thread.quit()
 
         def finish_fail(err: str):
             self.append("\n--- FAILED ---")
             self.append(err)
-
             self._set_busy(False)
-            self.thread.quit()
-            self.thread.wait()
-
             self._update_ui()
+            if self.thread and self.thread.isRunning():
+                self.thread.quit()
 
-        self.worker.done.connect(finish_ok)
-        self.worker.failed.connect(finish_fail)
+        self.worker.done.connect(finish_ok, Qt.QueuedConnection)
+        self.worker.failed.connect(finish_fail, Qt.QueuedConnection)
+
+        def cleanup():
+            try:
+                if self.worker is not None:
+                    self.worker.deleteLater()
+            finally:
+                self.worker = None
+            if self.thread is not None:
+                self.thread.deleteLater()
+                self.thread = None
+
+        self.thread.finished.connect(cleanup, Qt.QueuedConnection)
 
         self._set_busy(True)
         self.thread.start()
 
-    # ----------------------------
-    # Navigation
-    # ----------------------------
     def go_back(self):
         idx = self.stack.currentIndex()
         if idx > 0:
@@ -392,16 +522,22 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Not ready", "Run Step 1 and confirm results first.")
                 return
             self.stack.setCurrentIndex(1)
-        else:
-            # End of v0 wizard
+
+        elif idx == 1:
             if not self.stepB_paths:
                 QMessageBox.information(self, "Not ready", "Run Step 2 and confirm results first.")
                 return
-            QMessageBox.information(self, "Completed", "Step 1 and Step 2 are completed.\nNext steps will be added (Phase/Kuramoto/CSD).")
+            self.stack.setCurrentIndex(2)
+
+        else:
+            if not self.stepC_paths:
+                QMessageBox.information(self, "Not ready", "Run Step 3 and confirm results first.")
+                return
+            QMessageBox.information(self, "Completed", "Step 1~3 completed.\nNext: Kuramoto / CSD.")
         self._update_ui()
 
     # ----------------------------
-    # Step 1: run
+    # Step 1
     # ----------------------------
     def run_stepA(self):
         inp = self.pageA.in_tiff.text().strip()
@@ -420,13 +556,15 @@ class MainWindow(QMainWindow):
         self.out_dir = Path(out)
         self.stem = self.input_tiff.stem
 
-        # reset downstream state
         self.stepA_paths = {}
         self.stepB_paths = {}
+        self.stepC_paths = {}
+
         self.pageA.prev_overlay.set_image(None)
         self.pageA.prev_valid.set_image(None)
         self.pageB.prev_f0.set_image(None)
         self.pageB.prev_snap.set_image(None)
+        self.pageC.prev_phase.set_image(None)
 
         w = StepAWorker(
             inp, out,
@@ -435,9 +573,7 @@ class MainWindow(QMainWindow):
             mask_p=float(self.pageA.sp_maskp.value()),
         )
 
-        # hook into done to extract QC paths and auto-fill next step inputs
         def on_done(meta: dict):
-            # store expected outputs
             stem = self.stem or Path(inp).stem
             out_dir = Path(out)
 
@@ -449,25 +585,20 @@ class MainWindow(QMainWindow):
                 "qc_valid64": meta.get("qc_stepA_valid64"),
             }
 
-            # show previews if present
             self.pageA.prev_overlay.set_image(self.stepA_paths.get("qc_overlay"))
             self.pageA.prev_valid.set_image(self.stepA_paths.get("qc_valid64"))
 
-            # auto-fill Step 2 inputs
             self.pageB.in_matrix.setText(self.stepA_paths["matrix"])
             self.pageB.in_valid.setText(self.stepA_paths["valid"])
             self.pageB.out_dir.setText(str(out_dir))
 
             self._update_ui()
 
-        # attach temporary handler: done signal already connected in _start_thread
-        # so we chain by connecting another slot
-        w.done.connect(on_done)
-
+        w.done.connect(on_done, Qt.QueuedConnection)
         self._start_thread(w)
 
     # ----------------------------
-    # Step 2: run
+    # Step 2
     # ----------------------------
     def run_stepB(self):
         m = self.pageB.in_matrix.text().strip()
@@ -486,15 +617,13 @@ class MainWindow(QMainWindow):
 
         self.append("\nStarting Step 2...")
 
-        # reset stepB state
         self.stepB_paths = {}
+        self.stepC_paths = {}
         self.pageB.prev_f0.set_image(None)
         self.pageB.prev_snap.set_image(None)
+        self.pageC.prev_phase.set_image(None)
 
-        w = StepBWorker(
-            m, v, out,
-            f0_percentile=float(self.pageB.sp_f0.value()),
-        )
+        w = StepBWorker(m, v, out, f0_percentile=float(self.pageB.sp_f0.value()))
 
         def on_done(meta: dict):
             self.stepB_paths = {
@@ -505,10 +634,62 @@ class MainWindow(QMainWindow):
             }
             self.pageB.prev_f0.set_image(self.stepB_paths.get("qc_f0"))
             self.pageB.prev_snap.set_image(self.stepB_paths.get("qc_snap"))
+
+            # StepC 자동 입력
+            self.pageC.in_dff.setText(self.stepB_paths.get("dff") or "")
+            self.pageC.in_valid.setText(self.stepA_paths.get("valid") or "")
+            self.pageC.out_dir.setText(out)
+
             self._update_ui()
 
-        w.done.connect(on_done)
+        w.done.connect(on_done, Qt.QueuedConnection)
+        self._start_thread(w)
 
+    # ----------------------------
+    # Step 3
+    # ----------------------------
+    def run_stepC(self):
+        dff = self.pageC.in_dff.text().strip()
+        valid = self.pageC.in_valid.text().strip()
+        out = self.pageC.out_dir.text().strip()
+
+        if not dff or not Path(dff).exists():
+            self.append("ERROR: StepB dff file missing.")
+            return
+        if not valid or not Path(valid).exists():
+            self.append("ERROR: StepA valid file missing.")
+            return
+        if not out:
+            self.append("ERROR: Output folder missing.")
+            return
+
+        self.append("\nStarting Step 3...")
+
+        self.stepC_paths = {}
+        self.pageC.prev_phase.set_image(None)
+
+        w = StepCWorker(
+            dff_path=dff,
+            valid_path=valid,
+            out_dir=out,
+            fs=float(self.pageC.sp_fs.value()),
+            f_lo=float(self.pageC.sp_flo.value()),
+            f_hi=float(self.pageC.sp_fhi.value()),
+            filter_order=int(self.pageC.sp_order.value()),
+            time_decimate=int(self.pageC.sp_dec.value()),
+            fill_nan=str(self.pageC.cmb_fill.currentText()),
+            snapshot_t=int(self.pageC.sp_snap_t.value()),
+        )
+
+        def on_done(meta: dict):
+            self.stepC_paths = {
+                "phase": meta.get("saved_phase"),
+                "qc_snap": meta.get("qc_stepC_snap"),
+            }
+            self.pageC.prev_phase.set_image(self.stepC_paths.get("qc_snap"))
+            self._update_ui()
+
+        w.done.connect(on_done, Qt.QueuedConnection)
         self._start_thread(w)
 
 
