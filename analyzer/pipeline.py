@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
@@ -10,6 +11,8 @@ from .gridder import grid_to_64_with_valid
 from .dff import compute_dff
 from .phase import compute_hilbert_phase
 from .kuramoto import compute_kuramoto_metrics
+from .csd import compute_pseudo_csd, compute_activity_map
+from .report import make_spice_report
 
 from .qc import (
     save_mask_overlay,
@@ -52,11 +55,9 @@ def run_stepA(
     else:
         info = {"fail_count": 0}
 
-    # Mask reference
     ref = projection_ref(frames, mode=mask_mode, percentile=mask_percentile)
     mask = build_mask_from_ref(ref, blur_ksize=5, closing_radius=3, min_object_size=500)
 
-    # Grid
     matrix, valid_grid = grid_to_64_with_valid(frames, mask, grid=grid, min_coverage=min_coverage)
 
     meta = {
@@ -75,12 +76,10 @@ def run_stepA(
 
     stem = tiff_path.stem
 
-    # Save outputs
     np.save(out_dir / f"{stem}.stepA.matrix64.npy", matrix)
     np.save(out_dir / f"{stem}.stepA.valid64.npy", valid_grid.astype(np.uint8))
     np.save(out_dir / f"{stem}.stepA.mask.npy", mask.astype(np.uint8))
 
-    # ---- QC outputs (saved as PNG) ----
     qc_dir = out_dir / "qc"
     qc_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,10 +105,9 @@ def run_stepB_dff(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    mat = np.load(str(matrix_path)).astype(np.float32)                  # (T,64,64)
-    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)            # (64,64)
+    mat = np.load(str(matrix_path)).astype(np.float32)
+    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)
 
-    # === ΔF/F0 ===
     dff, f0 = compute_dff(mat, valid, f0_percentile=float(f0_percentile))
 
     name = matrix_path.name
@@ -130,7 +128,6 @@ def run_stepB_dff(
         "dff_mean": float(np.nanmean(dff)),
     }
 
-    # ---- QC outputs ----
     qc_dir = out_dir / "qc"
     qc_dir.mkdir(parents=True, exist_ok=True)
 
@@ -163,8 +160,8 @@ def run_stepC_phase(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    dff = np.load(str(dff_path)).astype(np.float32)             # (T,64,64)
-    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)     # (64,64)
+    dff = np.load(str(dff_path)).astype(np.float32)
+    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)
 
     res = compute_hilbert_phase(
         dff,
@@ -189,7 +186,6 @@ def run_stepC_phase(
         "phase_shape": list(res.phase.shape),
     }
 
-    # ---- QC ----
     qc_dir = out_dir / "qc"
     qc_dir.mkdir(parents=True, exist_ok=True)
 
@@ -209,17 +205,13 @@ def run_stepD_kuramoto(
     fs_eff: float,
     compute_local_coherence: bool = True,
 ) -> dict:
-    """
-    Step D: Kuramoto metrics
-    - phase64.npy + valid64.npy -> R(t), Phi(t), Phi_vel(t), local coherence map(optional)
-    """
     phase_path = Path(phase_path)
     valid_path = Path(valid_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    phase = np.load(str(phase_path)).astype(np.float32)           # (T,64,64)
-    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)       # (64,64)
+    phase = np.load(str(phase_path)).astype(np.float32)
+    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)
 
     res = compute_kuramoto_metrics(
         phase=phase,
@@ -231,7 +223,6 @@ def run_stepD_kuramoto(
     name = phase_path.name
     stem = name.replace(".stepC.phase64.npy", "").replace(".phase64.npy", "")
 
-    # save npy outputs
     r_path = out_dir / f"{stem}.stepD.R.npy"
     phi_path = out_dir / f"{stem}.stepD.Phi.npy"
     vel_path = out_dir / f"{stem}.stepD.Phi_vel.npy"
@@ -252,7 +243,6 @@ def run_stepD_kuramoto(
         **res.meta,
     }
 
-    # ---- QC ----
     qc_dir = out_dir / "qc"
     qc_dir.mkdir(parents=True, exist_ok=True)
 
@@ -264,5 +254,137 @@ def run_stepD_kuramoto(
         lc_png = qc_dir / f"{stem}.stepD_local_coh_map.png"
         save_local_coherence_map(res.local_coh, lc_png)
         meta["qc_stepD_local"] = str(lc_png)
+
+    return meta
+
+
+def run_stepE_csd(
+    dff_path: str | Path,
+    valid_path: str | Path,
+    out_dir: str | Path,
+    *,
+    sigma: float = 1.0,
+    dx: float = 1.0,
+    smooth_sigma: float = 1.0,
+    activity_mode: str = "mean_abs",
+    snapshot_t: int | None = None,
+) -> dict:
+    """
+    Step E (Path B):
+      Pseudo-CSD(t) = -sigma * ∇²(dF/F0)(t) / dx^2
+
+    Reflects the reference code:
+      - Gaussian smoothing before Laplacian
+      - dx scaling
+    But uses masked Laplacian for valid64 holes/edges.
+    """
+    dff_path = Path(dff_path)
+    valid_path = Path(valid_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dff = np.load(str(dff_path)).astype(np.float32)
+    valid = (np.load(str(valid_path)).astype(np.uint8) > 0)
+
+    csd = compute_pseudo_csd(
+        dff,
+        valid,
+        sigma=float(sigma),
+        dx=float(dx),
+        smooth_sigma=float(smooth_sigma),
+    )
+    activity = compute_activity_map(csd, valid, mode=str(activity_mode))
+
+    name = dff_path.name
+    stem = name.replace(".stepB.dff64.npy", "").replace(".dff64.npy", "")
+
+    csd_path = out_dir / f"{stem}.stepE.csd64.npy"
+    act_path = out_dir / f"{stem}.stepE.activity64.npy"
+    np.save(csd_path, csd)
+    np.save(act_path, activity)
+
+    def _finite_stats(x: np.ndarray) -> tuple[float, float, float]:
+        xf = x[np.isfinite(x)]
+        if xf.size == 0:
+            return (float("nan"), float("nan"), float("nan"))
+        return (float(np.min(xf)), float(np.max(xf)), float(np.mean(xf)))
+
+    csd_min, csd_max, csd_mean = _finite_stats(csd)
+    act_min, act_max, act_mean = _finite_stats(activity)
+
+    meta = {
+        "saved_csd": str(csd_path),
+        "saved_activity": str(act_path),
+        "sigma": float(sigma),
+        "dx": float(dx),
+        "smooth_sigma": float(smooth_sigma),
+        "activity_mode": str(activity_mode),
+        "csd_shape": list(csd.shape),
+        "csd_nan_ratio": float(np.isnan(csd).mean()),
+        "csd_min": csd_min,
+        "csd_max": csd_max,
+        "csd_mean": csd_mean,
+        "activity_min": act_min,
+        "activity_max": act_max,
+        "activity_mean": act_mean,
+    }
+
+    qc_dir = out_dir / "qc"
+    qc_dir.mkdir(parents=True, exist_ok=True)
+
+    t_total = int(csd.shape[0])
+    if t_total <= 0:
+        raise ValueError("CSD output has zero frames. Check StepB dff shape.")
+
+    if snapshot_t is None:
+        t_index = t_total // 2
+    else:
+        t_index = int(snapshot_t)
+        t_index = max(0, min(t_total - 1, t_index))
+
+    csd_png = qc_dir / f"{stem}.stepE_csd_snapshot.png"
+    act_png = qc_dir / f"{stem}.stepE_activity_map.png"
+
+    save_heatmap(csd[t_index], f"Pseudo-CSD snapshot (t={t_index})", csd_png)
+    save_heatmap(activity, f"Activity map ({activity_mode})", act_png)
+
+    meta["qc_stepE_csd"] = str(csd_png)
+    meta["qc_stepE_activity"] = str(act_png)
+
+    return meta
+
+def run_stepF_report(
+    out_dir: str | Path,
+    stem: str,
+) -> dict:
+    """
+    Step F (Final Output):
+      Collect StepA-E QC images and generate:
+        - dashboard PNG
+        - PDF report
+        - summary JSON
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    stem = str(stem).strip()
+    if not stem:
+        raise ValueError("StepF requires a non-empty stem")
+
+    res = make_spice_report(out_dir=out_dir, stem=stem)
+
+    meta = {
+        "saved_pdf": str(res.pdf_path),
+        "saved_dashboard": str(res.dashboard_png),
+        "saved_summary_json": str(res.summary_json),
+        "report_dir": str(res.pdf_path.parent),
+        "n_found_images": int(len(res.found_images)),
+        "n_missing_images": int(len(res.missing_images)),
+        "included_images": [lab for lab, _ in res.found_images],
+        "missing_images": list(res.missing_images),
+    }
+
+    for k, v in res.metrics.items():
+        meta[k] = v
 
     return meta

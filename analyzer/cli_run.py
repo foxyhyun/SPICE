@@ -9,17 +9,18 @@ from analyzer.pipeline import (
     run_stepB_dff,
     run_stepC_phase,
     run_stepD_kuramoto,
+    run_stepE_csd,
+    run_stepF_report,
 )
 
 
 def _print_meta(meta: dict):
-    # GUI가 파싱하기 쉬운 한 줄 출력
     print("__META__" + json.dumps(meta, ensure_ascii=False), flush=True)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--step", required=True, choices=["A", "B", "C", "D"])
+    ap.add_argument("--step", required=True, choices=["A", "B", "C", "D", "E", "F"])
     ap.add_argument("--out_dir", required=True)
 
     # StepA
@@ -45,10 +46,20 @@ def main() -> int:
     ap.add_argument("--fill_nan", default="interp", choices=["interp", "zero", "none"])
     ap.add_argument("--snapshot_t", type=int, default=-1)
 
-    # StepD (Kuramoto)  ---- GUI와 옵션명 매칭 ----
-    ap.add_argument("--phase", default=None)                 # StepC output: phase64.npy
-    ap.add_argument("--fs_eff", type=float, default=None)    # None이면 fs/time_decimate로 추정
-    ap.add_argument("--local_coh", action="store_true")      # GUI가 붙이는 옵션
+    # StepD
+    ap.add_argument("--phase", default=None)
+    ap.add_argument("--fs_eff", type=float, default=None)
+    ap.add_argument("--local_coh", action="store_true")
+
+    # StepE
+    ap.add_argument("--sigma", type=float, default=1.0)
+    ap.add_argument("--dx", type=float, default=1.0)
+    ap.add_argument("--smooth_sigma", type=float, default=1.0)
+    ap.add_argument("--activity_mode", default="mean_abs", choices=["mean_abs", "rms", "std"])
+    ap.add_argument("--csd_snapshot_t", type=int, default=-1)
+
+    # StepF
+    ap.add_argument("--stem", default=None)
 
     args = ap.parse_args()
     out_dir = Path(args.out_dir)
@@ -99,7 +110,7 @@ def main() -> int:
                 snapshot_t=snap,
             )
 
-        else:  # Step D
+        elif args.step == "D":
             if not args.phase or not args.valid:
                 raise ValueError("StepD requires --phase and --valid")
 
@@ -113,6 +124,32 @@ def main() -> int:
                 out_dir,
                 fs_eff=float(fs_eff),
                 compute_local_coherence=bool(args.local_coh),
+            )
+
+        elif args.step == "E":
+            if not args.dff or not args.valid:
+                raise ValueError("StepE requires --dff and --valid")
+
+            snap = None if args.csd_snapshot_t < 0 else int(args.csd_snapshot_t)
+
+            meta = run_stepE_csd(
+                args.dff,
+                args.valid,
+                out_dir,
+                sigma=float(args.sigma),
+                dx=float(args.dx),
+                smooth_sigma=float(args.smooth_sigma),
+                activity_mode=str(args.activity_mode),
+                snapshot_t=snap,
+            )
+
+        else:  # Step F
+            if not args.stem:
+                raise ValueError("StepF requires --stem")
+
+            meta = run_stepF_report(
+                out_dir=out_dir,
+                stem=str(args.stem),
             )
 
         _print_meta(meta)

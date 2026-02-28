@@ -468,6 +468,202 @@ class StepDPage(QWidget):
             os.startfile(str(qc_dir))
 
 
+class StepEPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+
+        box = QGroupBox("Step 5: Pseudo-CSD (Gaussian smoothing + masked Laplacian) → Save")
+        b = QVBoxLayout(box)
+
+        r1 = QHBoxLayout()
+        self.in_dff = QLineEdit()
+        btn_d = QPushButton("Select StepB dff64.npy")
+        btn_d.clicked.connect(self.pick_dff)
+        r1.addWidget(QLabel("StepB dFF:"))
+        r1.addWidget(self.in_dff)
+        r1.addWidget(btn_d)
+        b.addLayout(r1)
+
+        r2 = QHBoxLayout()
+        self.in_valid = QLineEdit()
+        btn_v = QPushButton("Select StepA valid64.npy")
+        btn_v.clicked.connect(self.pick_valid)
+        r2.addWidget(QLabel("StepA valid:"))
+        r2.addWidget(self.in_valid)
+        r2.addWidget(btn_v)
+        b.addLayout(r2)
+
+        r3 = QHBoxLayout()
+        self.out_dir = QLineEdit()
+        btn_out = QPushButton("Select Output Folder")
+        btn_out.clicked.connect(self.pick_outdir)
+        r3.addWidget(QLabel("Output folder:"))
+        r3.addWidget(self.out_dir)
+        r3.addWidget(btn_out)
+        b.addLayout(r3)
+
+        r4 = QHBoxLayout()
+        self.sp_sigma = QDoubleSpinBox()
+        self.sp_sigma.setRange(0.0, 1e6)
+        self.sp_sigma.setSingleStep(0.1)
+        self.sp_sigma.setValue(1.0)
+
+        self.sp_dx = QDoubleSpinBox()
+        self.sp_dx.setRange(1e-6, 1e6)
+        self.sp_dx.setDecimals(6)
+        self.sp_dx.setSingleStep(0.1)
+        self.sp_dx.setValue(1.0)
+
+        self.sp_smooth = QDoubleSpinBox()
+        self.sp_smooth.setRange(0.0, 50.0)
+        self.sp_smooth.setSingleStep(0.1)
+        self.sp_smooth.setValue(1.0)
+
+        r4.addWidget(QLabel("σ scale:"))
+        r4.addWidget(self.sp_sigma)
+        r4.addSpacing(10)
+        r4.addWidget(QLabel("dx:"))
+        r4.addWidget(self.sp_dx)
+        r4.addSpacing(10)
+        r4.addWidget(QLabel("smooth sigma:"))
+        r4.addWidget(self.sp_smooth)
+        r4.addStretch(1)
+        b.addLayout(r4)
+
+        r5 = QHBoxLayout()
+        self.cmb_mode = QComboBox()
+        self.cmb_mode.addItems(["mean_abs", "rms", "std"])
+
+        self.sp_snap_t = QSpinBox()
+        self.sp_snap_t.setRange(-1, 10_000_000)
+        self.sp_snap_t.setValue(-1)
+
+        r5.addWidget(QLabel("activity_mode:"))
+        r5.addWidget(self.cmb_mode)
+        r5.addSpacing(10)
+        r5.addWidget(QLabel("snapshot t (-1=mid):"))
+        r5.addWidget(self.sp_snap_t)
+        r5.addStretch(1)
+        b.addLayout(r5)
+
+        r6 = QHBoxLayout()
+        self.btn_run = QPushButton("Run Step 5")
+        r6.addWidget(self.btn_run)
+        r6.addStretch(1)
+
+        self.btn_open_qc = QPushButton("Open QC folder")
+        self.btn_open_qc.setEnabled(False)
+        r6.addWidget(self.btn_open_qc)
+        b.addLayout(r6)
+
+        lay.addWidget(box)
+
+        pbox = QGroupBox("Step 5 Results (QC Preview)")
+        p = QHBoxLayout(pbox)
+        self.prev_csd = ImagePreview("Pseudo-CSD Snapshot")
+        self.prev_act = ImagePreview("Activity Map")
+        p.addWidget(self.prev_csd)
+        p.addWidget(self.prev_act)
+        lay.addWidget(pbox)
+
+        lay.addStretch(1)
+        self.btn_open_qc.clicked.connect(self.open_qc)
+
+    def pick_dff(self):
+        p, _ = QFileDialog.getOpenFileName(self, "Select StepB dff", "", "NPY Files (*.npy)")
+        if p:
+            self.in_dff.setText(p)
+
+    def pick_valid(self):
+        p, _ = QFileDialog.getOpenFileName(self, "Select StepA valid", "", "NPY Files (*.npy)")
+        if p:
+            self.in_valid.setText(p)
+
+    def pick_outdir(self):
+        d = QFileDialog.getExistingDirectory(self, "Select output folder")
+        if d:
+            self.out_dir.setText(d)
+
+    def open_qc(self):
+        out = self.out_dir.text().strip()
+        if not out:
+            return
+        qc_dir = Path(out) / "qc"
+        if qc_dir.exists():
+            os.startfile(str(qc_dir))
+
+class StepFPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+
+        box = QGroupBox("Step 6: Final Output - Integrated SPICE Report -> Save")
+        b = QVBoxLayout(box)
+
+        r1 = QHBoxLayout()
+        self.in_stem = QLineEdit()
+        r1.addWidget(QLabel("Stem:"))
+        r1.addWidget(self.in_stem)
+        b.addLayout(r1)
+
+        r2 = QHBoxLayout()
+        self.out_dir = QLineEdit()
+        btn_out = QPushButton("Select Output Folder")
+        btn_out.clicked.connect(self.pick_outdir)
+        r2.addWidget(QLabel("Output folder:"))
+        r2.addWidget(self.out_dir)
+        r2.addWidget(btn_out)
+        b.addLayout(r2)
+
+        r3 = QHBoxLayout()
+        self.btn_run = QPushButton("Run Step 6")
+        r3.addWidget(self.btn_run)
+        r3.addStretch(1)
+
+        self.btn_open_reports = QPushButton("Open report folder")
+        self.btn_open_reports.setEnabled(False)
+        self.btn_open_qc = QPushButton("Open QC folder")
+        self.btn_open_qc.setEnabled(False)
+
+        r3.addWidget(self.btn_open_qc)
+        r3.addWidget(self.btn_open_reports)
+        b.addLayout(r3)
+
+        lay.addWidget(box)
+
+        pbox = QGroupBox("Step 6 Results (Preview)")
+        p = QHBoxLayout(pbox)
+        self.prev_dashboard = ImagePreview("SPICE Dashboard")
+        p.addWidget(self.prev_dashboard)
+        lay.addWidget(pbox)
+
+        lay.addStretch(1)
+
+        self.btn_open_reports.clicked.connect(self.open_reports)
+        self.btn_open_qc.clicked.connect(self.open_qc)
+
+    def pick_outdir(self):
+        d = QFileDialog.getExistingDirectory(self, "Select output folder")
+        if d:
+            self.out_dir.setText(d)
+
+    def open_reports(self):
+        out = self.out_dir.text().strip()
+        if not out:
+            return
+        rep_dir = Path(out) / "reports"
+        if rep_dir.exists():
+            os.startfile(str(rep_dir))
+
+    def open_qc(self):
+        out = self.out_dir.text().strip()
+        if not out:
+            return
+        qc_dir = Path(out) / "qc"
+        if qc_dir.exists():
+            os.startfile(str(qc_dir))
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -484,12 +680,14 @@ class MainWindow(QMainWindow):
         self.stepB_paths: dict = {}
         self.stepC_paths: dict = {}
         self.stepD_paths: dict = {}
+        self.stepE_paths: dict = {}
+        self.stepF_paths: dict = {}
 
         root = QWidget()
         self.setCentralWidget(root)
         lay = QVBoxLayout(root)
 
-        self.lbl_progress = QLabel("Step 1 / 4")
+        self.lbl_progress = QLabel("Step 1 / 6")
         self.lbl_progress.setStyleSheet("font-size: 18px; font-weight: 600;")
         lay.addWidget(self.lbl_progress)
 
@@ -498,10 +696,15 @@ class MainWindow(QMainWindow):
         self.pageB = StepBPage()
         self.pageC = StepCPage()
         self.pageD = StepDPage()
+        self.pageE = StepEPage()
+        self.pageF = StepFPage()
+
         self.stack.addWidget(self.pageA)
         self.stack.addWidget(self.pageB)
         self.stack.addWidget(self.pageC)
         self.stack.addWidget(self.pageD)
+        self.stack.addWidget(self.pageE)
+        self.stack.addWidget(self.pageF)
         lay.addWidget(self.stack, stretch=1)
 
         lay.addWidget(QLabel("Log / Meta:"))
@@ -526,6 +729,8 @@ class MainWindow(QMainWindow):
         self.pageB.btn_run.clicked.connect(self.run_stepB)
         self.pageC.btn_run.clicked.connect(self.run_stepC)
         self.pageD.btn_run.clicked.connect(self.run_stepD)
+        self.pageE.btn_run.clicked.connect(self.run_stepE)
+        self.pageF.btn_run.clicked.connect(self.run_stepF)
 
         self._update_ui()
 
@@ -537,12 +742,14 @@ class MainWindow(QMainWindow):
         self.pageB.btn_run.setEnabled(not busy)
         self.pageC.btn_run.setEnabled(not busy)
         self.pageD.btn_run.setEnabled(not busy)
+        self.pageE.btn_run.setEnabled(not busy)
+        self.pageF.btn_run.setEnabled(not busy)
         self.btn_back.setEnabled((not busy) and self.stack.currentIndex() > 0)
         self.btn_continue.setEnabled((not busy) and self.btn_continue.isEnabled())
 
     def _update_ui(self):
         idx = self.stack.currentIndex()
-        self.lbl_progress.setText(f"Step {idx+1} / 4")
+        self.lbl_progress.setText(f"Step {idx+1} / {self.stack.count()}")
         self.btn_back.setEnabled(idx > 0)
 
         if idx == 0:
@@ -551,13 +758,21 @@ class MainWindow(QMainWindow):
             self.btn_continue.setEnabled(bool(self.stepB_paths))
         elif idx == 2:
             self.btn_continue.setEnabled(bool(self.stepC_paths))
-        else:
+        elif idx == 3:
             self.btn_continue.setEnabled(bool(self.stepD_paths))
+        elif idx == 4:
+            self.btn_continue.setEnabled(bool(self.stepE_paths))
+        else:
+            self.btn_continue.setEnabled(bool(self.stepF_paths))
 
         self.pageA.btn_open_qc.setEnabled(bool(self.stepA_paths))
         self.pageB.btn_open_qc.setEnabled(bool(self.stepB_paths))
         self.pageC.btn_open_qc.setEnabled(bool(self.stepC_paths))
         self.pageD.btn_open_qc.setEnabled(bool(self.stepD_paths))
+        self.pageE.btn_open_qc.setEnabled(bool(self.stepE_paths))
+
+        self.pageF.btn_open_qc.setEnabled(bool(self.stepF_paths))
+        self.pageF.btn_open_reports.setEnabled(bool(self.stepF_paths))
 
     def _run_process(self, args: list[str], on_done):
         if self.proc_worker is not None:
@@ -614,11 +829,21 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Not ready", "Run Step 3 and confirm results first.")
                 return
             self.stack.setCurrentIndex(3)
-        else:
+        elif idx == 3:
             if not self.stepD_paths:
                 QMessageBox.information(self, "Not ready", "Run Step 4 and confirm results first.")
                 return
-            QMessageBox.information(self, "Completed", "Step 1~4 completed.\nNext: CSD / Reporting.")
+            self.stack.setCurrentIndex(4)
+        elif idx == 4:
+            if not self.stepE_paths:
+                QMessageBox.information(self, "Not ready", "Run Step 5 and confirm results first.")
+                return
+            self.stack.setCurrentIndex(5)
+        else:
+            if not self.stepF_paths:
+                QMessageBox.information(self, "Not ready", "Run Step 6 and confirm results first.")
+                return
+            QMessageBox.information(self, "Completed", "Step 1~6 completed.\nIntegrated SPICE report generated.")
         self._update_ui()
 
     def run_stepA(self):
@@ -642,6 +867,8 @@ class MainWindow(QMainWindow):
         self.stepB_paths = {}
         self.stepC_paths = {}
         self.stepD_paths = {}
+        self.stepE_paths = {}
+        self.stepF_paths = {}
 
         self.pageA.prev_overlay.set_image(None)
         self.pageA.prev_valid.set_image(None)
@@ -650,6 +877,8 @@ class MainWindow(QMainWindow):
         self.pageC.prev_phase.set_image(None)
         self.pageD.prev_ts.set_image(None)
         self.pageD.prev_local.set_image(None)
+        self.pageE.prev_csd.set_image(None)
+        self.pageE.prev_act.set_image(None)
 
         args = [
             sys.executable, "-m", "analyzer.cli_run",
@@ -681,9 +910,14 @@ class MainWindow(QMainWindow):
             self.pageB.in_valid.setText(self.stepA_paths["valid"])
             self.pageB.out_dir.setText(str(out_dir))
 
-            # StepD에도 valid/out_dir 자동 세팅
             self.pageD.in_valid.setText(self.stepA_paths["valid"])
             self.pageD.out_dir.setText(str(out_dir))
+
+            self.pageE.in_valid.setText(self.stepA_paths["valid"])
+            self.pageE.out_dir.setText(str(out_dir))
+
+            self.pageF.in_stem.setText(stem)
+            self.pageF.out_dir.setText(str(out_dir))
 
         self._run_process(args, on_done)
 
@@ -707,12 +941,16 @@ class MainWindow(QMainWindow):
         self.stepB_paths = {}
         self.stepC_paths = {}
         self.stepD_paths = {}
-
+        self.stepE_paths = {}
+        self.stepF_paths = {}
         self.pageB.prev_f0.set_image(None)
         self.pageB.prev_snap.set_image(None)
         self.pageC.prev_phase.set_image(None)
         self.pageD.prev_ts.set_image(None)
         self.pageD.prev_local.set_image(None)
+        self.pageE.prev_csd.set_image(None)
+        self.pageE.prev_act.set_image(None)
+        self.pageF.prev_dashboard.set_image(None)
 
         args = [
             sys.executable, "-m", "analyzer.cli_run",
@@ -737,6 +975,10 @@ class MainWindow(QMainWindow):
             self.pageC.in_valid.setText(self.stepA_paths.get("valid") or "")
             self.pageC.out_dir.setText(out)
 
+            self.pageE.in_dff.setText(self.stepB_paths.get("dff") or "")
+            self.pageE.in_valid.setText(self.stepA_paths.get("valid") or "")
+            self.pageE.out_dir.setText(out)
+
         self._run_process(args, on_done)
 
     def run_stepC(self):
@@ -758,9 +1000,11 @@ class MainWindow(QMainWindow):
 
         self.stepC_paths = {}
         self.stepD_paths = {}
+        self.stepF_paths = {}
         self.pageC.prev_phase.set_image(None)
         self.pageD.prev_ts.set_image(None)
         self.pageD.prev_local.set_image(None)
+        self.pageF.prev_dashboard.set_image(None)
 
         args = [
             sys.executable, "-m", "analyzer.cli_run",
@@ -785,12 +1029,10 @@ class MainWindow(QMainWindow):
             }
             self.pageC.prev_phase.set_image(self.stepC_paths.get("qc_snap"))
 
-            # StepD 입력 자동 세팅
             self.pageD.in_phase.setText(self.stepC_paths.get("phase") or "")
             self.pageD.in_valid.setText(self.stepA_paths.get("valid") or "")
             self.pageD.out_dir.setText(out)
 
-            # fs_eff 자동 반영(없으면 현재값 유지)
             eff_fs = self.stepC_paths.get("eff_fs")
             if eff_fs is not None:
                 try:
@@ -818,8 +1060,10 @@ class MainWindow(QMainWindow):
         self.append("\nStarting Step 4...")
 
         self.stepD_paths = {}
+        self.stepF_paths = {}
         self.pageD.prev_ts.set_image(None)
         self.pageD.prev_local.set_image(None)
+        self.pageF.prev_dashboard.set_image(None)
 
         args = [
             sys.executable, "-m", "analyzer.cli_run",
@@ -843,6 +1087,95 @@ class MainWindow(QMainWindow):
             }
             self.pageD.prev_ts.set_image(self.stepD_paths.get("qc_ts"))
             self.pageD.prev_local.set_image(self.stepD_paths.get("qc_local"))
+
+        self._run_process(args, on_done)
+
+    def run_stepE(self):
+        dff = self.pageE.in_dff.text().strip()
+        valid = self.pageE.in_valid.text().strip()
+        out = self.pageE.out_dir.text().strip()
+
+        if not dff or not Path(dff).exists():
+            self.append("ERROR: StepB dff file missing.")
+            return
+        if not valid or not Path(valid).exists():
+            self.append("ERROR: StepA valid file missing.")
+            return
+        if not out:
+            self.append("ERROR: Output folder missing.")
+            return
+
+        self.append("\nStarting Step 5...")
+
+        self.stepE_paths = {}
+        self.stepF_paths = {}
+        self.pageE.prev_csd.set_image(None)
+        self.pageE.prev_act.set_image(None)
+        self.pageF.prev_dashboard.set_image(None)
+
+        args = [
+            sys.executable, "-m", "analyzer.cli_run",
+            "--step", "E",
+            "--dff", dff,
+            "--valid", valid,
+            "--out_dir", out,
+            "--sigma", str(float(self.pageE.sp_sigma.value())),
+            "--dx", str(float(self.pageE.sp_dx.value())),
+            "--smooth_sigma", str(float(self.pageE.sp_smooth.value())),
+            "--activity_mode", str(self.pageE.cmb_mode.currentText()),
+            "--csd_snapshot_t", str(int(self.pageE.sp_snap_t.value())),
+        ]
+
+        def on_done(meta: dict):
+            self.stepE_paths = {
+                "csd": meta.get("saved_csd"),
+                "activity": meta.get("saved_activity"),
+                "qc_csd": meta.get("qc_stepE_csd"),
+                "qc_act": meta.get("qc_stepE_activity"),
+            }
+            self.pageE.prev_csd.set_image(self.stepE_paths.get("qc_csd"))
+            self.pageE.prev_act.set_image(self.stepE_paths.get("qc_act"))
+
+            if self.stem:
+                self.pageF.in_stem.setText(self.stem)
+            self.pageF.out_dir.setText(out)
+
+        self._run_process(args, on_done)
+
+    def run_stepF(self):
+        stem = self.pageF.in_stem.text().strip()
+        out = self.pageF.out_dir.text().strip()
+
+        if not stem:
+            self.append("ERROR: Stem missing.")
+            return
+        if not out:
+            self.append("ERROR: Output folder missing.")
+            return
+        if not Path(out).exists():
+            self.append("ERROR: Output folder does not exist.")
+            return
+
+        self.append("\nStarting Step 6...")
+
+        self.stepF_paths = {}
+        self.pageF.prev_dashboard.set_image(None)
+
+        args = [
+            sys.executable, "-m", "analyzer.cli_run",
+            "--step", "F",
+            "--stem", stem,
+            "--out_dir", out,
+        ]
+
+        def on_done(meta: dict):
+            self.stepF_paths = {
+                "pdf": meta.get("saved_pdf"),
+                "dashboard": meta.get("saved_dashboard"),
+                "summary_json": meta.get("saved_summary_json"),
+                "report_dir": meta.get("report_dir"),
+            }
+            self.pageF.prev_dashboard.set_image(self.stepF_paths.get("dashboard"))
 
         self._run_process(args, on_done)
 
